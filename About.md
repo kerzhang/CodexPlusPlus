@@ -540,4 +540,119 @@ node_modules/
 
 ---
 
+## 13. Git 分支策略与多机协作
+
+本节记录本 fork 的分支用法、向上游提 PR 后的维护方式，以及换电脑继续开发的步骤。
+
+### 13.1 分支分工
+
+```text
+upstream/main (BigPizzaV3/CodexPlusPlus)
+  │
+  ├── origin/main          ← fork 基线，尽量与 upstream 保持同步
+  │
+  ├── info/knowproj        ← 日常学习 / 开发（含 About.md、本地改动、已合并的 bug 修复）
+  │
+  └── fix/...              ← 仅含上游 PR 的改动，PR 合并后可删除
+```
+
+| 分支 | 用途 | 是否合并进 fork 的 `main` |
+|------|------|---------------------------|
+| `info/knowproj` | 个人完整工作区：学习笔记、本地配置、实验性改动 | 可选（见 13.2） |
+| `fix/...` | 向上游提交的 PR 专用分支 | **不必**（与 bug 修复内容重复） |
+| `main` | 跟踪上游的干净基线 | 通常只跟 `upstream/main` 同步 |
+
+**不必把两个分支都 merge 进 `main`。** `fix/...` 里的 bug 修复在 `info/knowproj` 里通常已有；PR 分支等 review 结束即可删。
+
+### 13.2 日常开发选哪条分支
+
+**推荐：继续在 `info/knowproj` 上开发**
+
+```bash
+git checkout info/knowproj
+# 改代码、做实验、更新 About.md
+```
+
+若希望 fork 的默认分支就是「我的完整版本」，可一次性合并：
+
+```bash
+git checkout main
+git merge info/knowproj
+git push origin main
+```
+
+代价：fork 的 `main` 会与 `upstream/main` 分叉（含 `About.md` 等个人文件），日后同步上游需处理冲突。
+
+### 13.3 向上游提 PR
+
+- **Base**：`BigPizzaV3/CodexPlusPlus` → `main`
+- **Head**：`kerzhang/CodexPlusPlus` → `fix/...`（仅含 bug 相关文件）
+- 个人笔记（如 `About.md`）、`.gitignore` 本地改动等**不要**放进上游 PR
+
+从个人分支拆出干净 PR 分支的常用做法：
+
+```bash
+git fetch upstream
+git checkout -b fix/your-fix upstream/main
+git checkout info/knowproj -- path/to/bug-fix-files
+git commit -m "fix: ..."
+git push -u origin fix/your-fix
+```
+
+### 13.4 上游合并 PR 之后
+
+```bash
+git fetch upstream
+git checkout main
+git merge upstream/main          # 或 git rebase upstream/main
+git push origin main
+
+git checkout info/knowproj
+git rebase main                  # 把个人分支接到最新上游之上
+git push origin info/knowproj
+```
+
+已合并的 PR 分支可删除：
+
+```bash
+git branch -d fix/your-fix
+git push origin --delete fix/your-fix
+```
+
+### 13.5 换一台电脑继续工作
+
+```bash
+# 1. 克隆你的 fork（含个人分支）
+git clone https://github.com/kerzhang/CodexPlusPlus.git
+cd CodexPlusPlus
+
+# 2. 添加上游（只需一次）
+git remote add upstream https://github.com/BigPizzaV3/CodexPlusPlus.git
+git fetch upstream
+
+# 3. 切到个人开发分支
+git checkout info/knowproj
+
+# 4. 构建（见第 8 节）
+cd apps/codex-plus-manager && npm install && npm run vite:build
+cd ../.. && cargo build --release -p codex-plus-launcher -p codex-plus-manager
+
+# 5. 启动（二选一，勿双开 57321）
+cargo run --release -p codex-plus-launcher
+# 或 npm run dev（在 apps/codex-plus-manager）后在 UI 里启动
+```
+
+安装到本机 `/Applications` 时，用 `dist/macos/stage/` 下的 `.app`（见 8.3）。本地 ad-hoc 构建若提示「已损坏」，执行：
+
+```bash
+sudo xattr -rd com.apple.quarantine "/Applications/Codex++.app"
+sudo xattr -rd com.apple.quarantine "/Applications/Codex++ 管理工具.app"
+```
+
+### 13.6 已修复问题备忘：模型白名单与侧栏崩溃
+
+开启「模型白名单解锁」后，点击右侧 Files / Browser / Terminal 曾触发 `this.events[e].clear is not a function`。根因是 `patchReactModelState()` 扫描全页 `button` 并改写 React fiber。修复已提交上游 PR；在 `info/knowproj` 上构建即包含该修复。
+
+---
+
 *本文档为学习笔记性质，随项目演进可能需要更新。以源码与 README 为准。*
