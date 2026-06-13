@@ -33,14 +33,44 @@ fn insert_provider(path: &std::path::Path, id: &str, name: &str, config: serde_j
 }
 
 #[test]
-fn effective_ownership_auto_prefers_ccswitch_when_linked() {
+fn effective_ownership_auto_uses_codexplusplus_when_ccswitch_not_detected() {
     let mut settings = BackendSettings::default();
     settings.ccs_link_enabled = true;
     settings.config_ownership = ConfigOwnership::Auto;
+    if config_coordinator::detect_ccswitch() {
+        return;
+    }
     assert_eq!(
         config_coordinator::effective_ownership(&settings),
-        ConfigOwnership::CcSwitch
+        ConfigOwnership::CodexPlusPlus
     );
+}
+
+#[test]
+fn effective_ownership_auto_prefers_ccswitch_when_linked_and_detected() {
+    let dir = tempfile::tempdir().unwrap();
+    let ccswitch_dir = dir.path().join(".cc-switch");
+    std::fs::create_dir_all(&ccswitch_dir).unwrap();
+    create_ccs_db(&ccswitch_dir.join("cc-switch.db"));
+
+    let previous_home = std::env::var_os("HOME");
+    unsafe {
+        std::env::set_var("HOME", dir.path());
+    }
+    let effective = {
+        let mut settings = BackendSettings::default();
+        settings.ccs_link_enabled = true;
+        settings.config_ownership = ConfigOwnership::Auto;
+        config_coordinator::effective_ownership(&settings)
+    };
+    unsafe {
+        match previous_home {
+            Some(value) => std::env::set_var("HOME", value),
+            None => std::env::remove_var("HOME"),
+        }
+    }
+
+    assert_eq!(effective, ConfigOwnership::CcSwitch);
 }
 
 #[test]
