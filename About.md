@@ -35,9 +35,11 @@ CodexPlusPlus/
 │   └── codex-plus-data/           # 数据层（SQLite、导出、Provider 同步）
 ├── assets/inject/
 │   └── renderer-inject.js         # 注入到 Codex 渲染端的增强脚本
-├── scripts/installer/
-│   ├── windows/CodexPlusPlus.nsi  # Windows 安装包
-│   └── macos/package-dmg.sh       # macOS DMG 打包
+├── scripts/
+│   ├── build-windows.ps1          # Windows 一键构建（见 8.3）
+│   └── installer/
+│       ├── windows/CodexPlusPlus.nsi  # Windows 安装包
+│       └── macos/package-dmg.sh       # macOS DMG 打包
 ├── Cargo.toml                     # Rust workspace（类似 monorepo 根配置）
 └── README.md                      # 官方使用说明
 ```
@@ -272,6 +274,7 @@ launcher 启动 Codex → cdp 注入 renderer-inject.js → 页面增强
 
 - Rust 1.85+（`rustc --version`）
 - Node.js + npm（管理工具前端）
+- Windows 打安装包时还需 [NSIS](https://nsis.sourceforge.io/Download)（`makensis.exe`）；可用 `winget install NSIS.NSIS` 安装
 
 ### 8.2 完整构建步骤（macOS 示例）
 
@@ -289,17 +292,55 @@ cargo build --release -p codex-plus-launcher -p codex-plus-manager
 bash scripts/installer/macos/package-dmg.sh 1.2.5 arm64
 ```
 
-### 8.3 产物位置
+### 8.3 Windows 一键构建（PowerShell）
+
+仓库提供 `scripts/build-windows.ps1`，流程与 CI 的 `windows-installer` job 一致：前端构建 → Rust release 编译 → 暂存 exe → NSIS 打安装包。
+
+在仓库根目录执行：
+
+```powershell
+cd D:\kerzh\pj\CodexPlusPlus
+.\scripts\build-windows.ps1
+```
+
+若 PowerShell 提示禁止运行脚本，先执行（仅需一次）：
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+常用参数：
+
+| 参数 | 说明 |
+|------|------|
+| `-Version <版本>` | 安装包版本号；默认读取 `Cargo.toml` workspace version |
+| `-SkipFrontend` | 跳过 `npm install` 与 `vite:build`（前端已构建时） |
+| `-SkipInstaller` | 只编译 exe，不运行 NSIS |
+
+示例：
+
+```powershell
+.\scripts\build-windows.ps1 -Version 1.2.7-dev
+.\scripts\build-windows.ps1 -SkipFrontend -SkipInstaller
+```
+
+Windows 产物路径见 8.4。
+
+### 8.4 产物位置
 
 | 产物 | 路径 |
 |------|------|
-| 启动器二进制 | `target/release/codex-plus-plus` |
-| 管理工具二进制 | `target/release/codex-plus-plus-manager` |
+| 启动器二进制（macOS） | `target/release/codex-plus-plus` |
+| 管理工具二进制（macOS） | `target/release/codex-plus-plus-manager` |
 | Codex++.app | `dist/macos/stage/Codex++.app` |
 | 管理工具 .app | `dist/macos/stage/Codex++ 管理工具.app` |
 | DMG | `dist/macos/CodexPlusPlus-*-macos-*.dmg` |
+| 启动器二进制（Windows） | `target/release/codex-plus-plus.exe` |
+| 管理工具二进制（Windows） | `target/release/codex-plus-plus-manager.exe` |
+| 暂存目录（Windows） | `dist/windows/app/` |
+| NSIS 安装包（Windows） | `dist/windows/CodexPlusPlus-*-windows-x64-setup.exe` |
 
-### 8.4 常见构建坑
+### 8.5 常见构建坑
 
 1. **直接 `cargo build` 失败**：提示 `frontendDist "../dist"` 不存在 → 先 `npm run vite:build`
 2. **CONTRIBUTING.md 不完整**：只写了 `cargo build`，未提前端步骤；以 README「开发」章节为准
@@ -310,7 +351,9 @@ bash scripts/installer/macos/package-dmg.sh 1.2.5 arm64
    sudo xattr -rd com.apple.quarantine "/Applications/Codex++ 管理工具.app"
    ```
 
-### 8.5 日常开发：如何启动两个程序
+4. **Windows 找不到 makensis**：安装 NSIS（`winget install NSIS.NSIS`），或加 `-SkipInstaller` 只编译 exe
+
+### 8.6 日常开发：如何启动两个程序
 
 日常开发**不要**直接跑 `target/release/` 下的成品二进制（无热更新，且易与已安装 App 冲突）。推荐方式如下。
 
@@ -357,7 +400,7 @@ cargo run --release -p codex-plus-launcher
 
 > **注意**：`npm run dev` 与 release 二进制**不是**同一种启动方式；前者是开发模式，后者是成品模式。
 
-### 8.6 故障排查：管理工具「启动了但什么都没出现」
+### 8.7 故障排查：管理工具「启动了但什么都没出现」
 
 两个程序都有**单实例保护**。若检测到已有实例占用守卫端口，新进程会**静默退出**（exit 0，无窗口、无终端报错）。
 
@@ -642,7 +685,7 @@ cargo run --release -p codex-plus-launcher
 # 或 npm run dev（在 apps/codex-plus-manager）后在 UI 里启动
 ```
 
-安装到本机 `/Applications` 时，用 `dist/macos/stage/` 下的 `.app`（见 8.3）。本地 ad-hoc 构建若提示「已损坏」，执行：
+安装到本机 `/Applications` 时，用 `dist/macos/stage/` 下的 `.app`（见 8.4）。本地 ad-hoc 构建若提示「已损坏」，执行：
 
 ```bash
 sudo xattr -rd com.apple.quarantine "/Applications/Codex++.app"
