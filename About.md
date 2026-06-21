@@ -585,74 +585,125 @@ node_modules/
 
 ## 13. Git 分支策略与多机协作
 
-本节记录本 fork 的分支用法、向上游提 PR 后的维护方式，以及换电脑继续开发的步骤。
+本节记录本 fork 的分支用法、**从 upstream 同步更新**的标准流程，以及换电脑继续开发的步骤。
+
+**日常开发以 `develop` 分支为准。** `main` 只负责跟踪上游；个人笔记、实验性改动都在 `develop` 上积累。
 
 ### 13.1 分支分工
 
 ```text
 upstream/main (BigPizzaV3/CodexPlusPlus)
   │
-  ├── origin/main          ← fork 基线，尽量与 upstream 保持同步
+  ├── origin/main          ← fork 基线：只合并 upstream，不放个人笔记
   │
-  ├── info/knowproj        ← 日常学习 / 开发（含 About.md、本地改动、已合并的 bug 修复）
+  ├── develop              ← 日常开发主分支（About.md、本地改动、实验）
   │
-  └── fix/...              ← 仅含上游 PR 的改动，PR 合并后可删除
+  └── fix/...              ← 向上游 PR 专用，PR 合并后可删除
 ```
 
-| 分支 | 用途 | 是否合并进 fork 的 `main` |
-|------|------|---------------------------|
-| `info/knowproj` | 个人完整工作区：学习笔记、本地配置、实验性改动 | 可选（见 13.2） |
-| `fix/...` | 向上游提交的 PR 专用分支 | **不必**（与 bug 修复内容重复） |
-| `main` | 跟踪上游的干净基线 | 通常只跟 `upstream/main` 同步 |
+| 分支 | 用途 |
+|------|------|
+| `develop` | **主开发分支**：学习笔记、配置、功能实验、合并后的上游代码 |
+| `main` | 跟踪 `upstream/main` 的干净基线，便于同步 |
+| `fix/...` | 仅含拟提交上游的改动，从 `upstream/main` 拉出 |
 
-**不必把两个分支都 merge 进 `main`。** `fix/...` 里的 bug 修复在 `info/knowproj` 里通常已有；PR 分支等 review 结束即可删。
+`info/knowproj` 为早期个人分支，内容已并入 `develop` 时可不再使用。
 
-### 13.2 日常开发选哪条分支
-
-**推荐：继续在 `info/knowproj` 上开发**
+### 13.2 日常开发
 
 ```bash
-git checkout info/knowproj
+git checkout develop
 # 改代码、做实验、更新 About.md
+git add ...
+git commit -m "..."
+git push origin develop
 ```
 
-若希望 fork 的默认分支就是「我的完整版本」，可一次性合并：
+不要在 `main` 上直接做个人开发，否则日后同步 upstream 容易混乱。
+
+### 13.3 同步 upstream（upstream 有更新时定期执行）
+
+upstream 更新频繁时，**推荐固定走「先 main、再 develop」**，不要直接在 `develop` 上 `rebase upstream/main`（除非你很熟悉冲突处理）。
+
+#### 标准步骤
 
 ```bash
+cd /path/to/CodexPlusPlus
+
+# 1. 拉取上游（remote 只需添加一次，见 13.6）
+git fetch upstream
+
+# 2. 把 upstream 合进 fork 的 main
 git checkout main
-git merge info/knowproj
+git merge upstream/main
+# 若有冲突：在 main 上解决 → git add → git commit
 git push origin main
+
+# 3. 把最新 main 合进 develop
+git checkout develop
+git merge main
+# 若有冲突：在 develop 上解决 → git add → git commit
+git push origin develop
 ```
 
-代价：fork 的 `main` 会与 `upstream/main` 分叉（含 `About.md` 等个人文件），日后同步上游需处理冲突。
+#### 流程示意
 
-### 13.3 向上游提 PR
+```text
+upstream/main ──merge──► main ──merge──► develop
+                              ▲
+                         你的日常开发在这里
+```
+
+#### 会不会再有 conflict？
+
+- **不能保证永远零冲突**，但按上述顺序，多数时候能顺利合并。
+- 若 upstream 与你都改了同一文件（如 `renderer-inject.js`），仍可能冲突；在 `git merge main` 这一步解决即可。
+- **已合并进 upstream 的旧 bug fix commit 不要再次 rebase 到 develop 上**，否则可能与 `main` 里已有实现重复冲突（例如模型白名单侧栏修复）。
+- 个人改动尽量放在 `About.md` 等 upstream 很少改的文件；改核心代码后尽快按本流程 sync 一次。
+
+#### 不推荐的做法
+
+```bash
+# 避免：在 develop 上 rebase main（历史被改写，易与已 push 的 develop 冲突）
+git checkout develop
+git rebase main
+
+# 避免：跳过 main，develop 直接 merge upstream/main（main 与 upstream 脱节）
+git checkout develop
+git merge upstream/main
+```
+
+#### 冲突已解决后
+
+```bash
+git status                    # 确认 working tree clean
+git log --oneline -5          # 确认 develop 已包含 main 最新 commit
+```
+
+### 13.4 向上游提 PR
 
 - **Base**：`BigPizzaV3/CodexPlusPlus` → `main`
-- **Head**：`kerzhang/CodexPlusPlus` → `fix/...`（仅含 bug 相关文件）
-- 个人笔记（如 `About.md`）、`.gitignore` 本地改动等**不要**放进上游 PR
+- **Head**：`kerzhang/CodexPlusPlus` → `fix/...`（仅含 bug / 功能相关文件）
+- 个人笔记（`About.md` 等）**不要**放进上游 PR
 
-从个人分支拆出干净 PR 分支的常用做法：
+从 `develop` 拆出干净 PR 分支：
 
 ```bash
 git fetch upstream
 git checkout -b fix/your-fix upstream/main
-git checkout info/knowproj -- path/to/bug-fix-files
+git checkout develop -- path/to/changed-files
 git commit -m "fix: ..."
 git push -u origin fix/your-fix
 ```
 
-### 13.4 上游合并 PR 之后
+### 13.5 上游合并你的 PR 之后
+
+PR 被 upstream 接受后，按 **13.3** 再走一遍即可；无需在 `develop` 里保留重复的 fix commit。
 
 ```bash
 git fetch upstream
-git checkout main
-git merge upstream/main          # 或 git rebase upstream/main
-git push origin main
-
-git checkout info/knowproj
-git rebase main                  # 把个人分支接到最新上游之上
-git push origin info/knowproj
+git checkout main && git merge upstream/main && git push origin main
+git checkout develop && git merge main && git push origin develop
 ```
 
 已合并的 PR 分支可删除：
@@ -662,10 +713,10 @@ git branch -d fix/your-fix
 git push origin --delete fix/your-fix
 ```
 
-### 13.5 换一台电脑继续工作
+### 13.6 换一台电脑继续工作
 
 ```bash
-# 1. 克隆你的 fork（含个人分支）
+# 1. 克隆 fork
 git clone https://github.com/kerzhang/CodexPlusPlus.git
 cd CodexPlusPlus
 
@@ -673,14 +724,19 @@ cd CodexPlusPlus
 git remote add upstream https://github.com/BigPizzaV3/CodexPlusPlus.git
 git fetch upstream
 
-# 3. 切到个人开发分支
-git checkout info/knowproj
+# 3. 切到开发主分支
+git checkout develop
 
-# 4. 构建（见第 8 节）
+# 4. 若本地 develop 落后于 fork，先 pull
+git pull origin develop
+
+# 5. 可选：按 13.3 同步一次 upstream
+
+# 6. 构建（见第 8 节）
 cd apps/codex-plus-manager && npm install && npm run vite:build
 cd ../.. && cargo build --release -p codex-plus-launcher -p codex-plus-manager
 
-# 5. 启动（二选一，勿双开 57321）
+# 7. 启动（二选一，勿双开 57321）
 cargo run --release -p codex-plus-launcher
 # 或 npm run dev（在 apps/codex-plus-manager）后在 UI 里启动
 ```
@@ -692,9 +748,9 @@ sudo xattr -rd com.apple.quarantine "/Applications/Codex++.app"
 sudo xattr -rd com.apple.quarantine "/Applications/Codex++ 管理工具.app"
 ```
 
-### 13.6 已修复问题备忘：模型白名单与侧栏崩溃
+### 13.7 已修复问题备忘：模型白名单与侧栏崩溃
 
-开启「模型白名单解锁」后，点击右侧 Files / Browser / Terminal 曾触发 `this.events[e].clear is not a function`。根因是 `patchReactModelState()` 扫描全页 `button` 并改写 React fiber。修复已提交上游 PR；在 `info/knowproj` 上构建即包含该修复。
+开启「模型白名单解锁」后，点击右侧 Files / Browser / Terminal 曾触发 `this.events[e].clear is not a function`。根因是 `patchReactModelState()` 扫描全页 `button` 并改写 React fiber。修复已提交上游 PR；同步 upstream 后 `develop` 会包含上游版本（含后续重构）。**勿再 cherry-pick / rebase 旧的 fix commit。**
 
 ---
 
