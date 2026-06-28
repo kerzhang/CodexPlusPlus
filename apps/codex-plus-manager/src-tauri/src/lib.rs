@@ -28,9 +28,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             let url = if show_update {
-                "index.html?showUpdate=1"
+                "/index.html?showUpdate=1"
             } else {
-                "index.html"
+                "/index.html"
             };
             let main_window =
                 tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App(url.into()))
@@ -50,6 +50,11 @@ pub fn run() {
             commands::restart_codex_plus,
             commands::load_settings,
             commands::save_settings,
+            commands::load_ccs_providers,
+            commands::import_ccs_providers,
+            commands::load_pending_provider_import,
+            commands::confirm_pending_provider_import,
+            commands::dismiss_pending_provider_import,
             commands::list_local_sessions,
             commands::list_zed_remote_projects,
             commands::open_zed_remote,
@@ -67,6 +72,8 @@ pub fn run() {
             commands::uninstall_entrypoints,
             commands::repair_shortcuts,
             commands::repair_backend,
+            commands::plugin_marketplace_status,
+            commands::repair_plugin_marketplace,
             commands::check_update,
             commands::perform_update,
             commands::load_watcher_state,
