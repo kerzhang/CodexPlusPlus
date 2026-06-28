@@ -6,6 +6,7 @@ venv/
 build/
 dist/
 target/
+node_modules/
 apps/codex-plus-manager/src-tauri/gen/
 
 .codex_asar_extract/
@@ -17,4 +18,8 @@ docs/superpowers/
 *.log
 .DS_Store
 Thumbs.db
-node_modules/
+.env
+
+# pnpm artifacts (project uses npm)
+pnpm-lock.yaml
+pnpm-workspace.yaml
